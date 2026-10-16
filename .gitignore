@@ -1,7 +1,2 @@
-# Virtual environment
 .venv/
-venv/
-
-# Environment variables and secrets
 .env
-.env.*
