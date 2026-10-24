@@ -1,3 +1,4 @@
+
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
@@ -13,6 +14,8 @@ client = OpenAI(
 
 messages = []
 
+MAX_STEPS = 5
+
 #system prompting for behaviour of the agent
 # messages.append(
 #     {
@@ -23,9 +26,10 @@ messages = []
 messages.append(
     {
         "role": "system",
-        "content":"give responses in hinglish."
+        "content": "give responses in hinglish."
     }
 )
+
 while True:
 
     user_input = input("\nSUBHAM: ")
@@ -41,39 +45,56 @@ while True:
     )
 
     #1st call to llm
-    response = client.chat.completions.create(
-        model=os.getenv("MODEL"),
-        messages=messages,
-        tools=TOOLS
-    )
-    msg = response.choices[0].message # even try to print the  full respnse and see the whole response kaise tool milta ki  konsa tool call karna hai
-    if msg.tool_calls:
-        messages.append(msg)
+    for step in range(MAX_STEPS):
+        response = client.chat.completions.create(
+            model=os.getenv("MODEL"),
+            messages=messages,
+            tools=TOOLS
+        )
 
-        for tool_call in msg.tool_calls:
-            function_name = tool_call.function.name
-            func_args = json.loads(tool_call.function.arguments or "{}")
+        msg = response.choices[0].message
 
-            fn = function_name_mpp.get(function_name)#call the func from map
-            if fn:
-                tool_response = fn(**func_args)#we get in dict format, so we unpack it and pass it to the function
+        # even try to print the full response and see the whole response kaise tool milta ki konsa tool call karna hai
+        if msg.tool_calls:
+            messages.append(msg)
+
+            for tool_call in msg.tool_calls:
+                function_name = tool_call.function.name
+                func_args = {}
+
+                try:
+                    func_args = json.loads(tool_call.function.arguments or "{}")
+                    fn = function_name_mpp.get(function_name)
+
+                    if fn is None:
+                        raise ValueError("Unknown function: " + function_name)
+
+                    tool_response = fn(**func_args)
+
+                except Exception as e:
+                    tool_response = f"Error calling function {function_name}: {str(e)}"
+
                 messages.append(
                     {
                         "role": "tool",
-                        "tool_id" : "tool_call.id",
+                        "tool_call_id": tool_call.id,
                         "content": str(tool_response)
                     }
                 )
 
-        #2nd call to llm 
-        response = client.chat.completions.create(
-            model=os.getenv("MODEL"),
-            messages=messages
+        else:
+            messages.append(msg)
+            print("Assistant: " + (msg.content or ""))
+            break
+     
+    else:
+        fallback = "Sorry, I could not finish this within the step limit."
+        messages.append(
+            {
+                "role": "assistant",
+                "content": fallback
+            }
         )
-        msg = response.choices[0].message
+        print("Assistant: " + fallback)
 
-        messages.append({
-            "role": "assistant",
-            "content": msg.content
-        })
-    print("Assistant: " + response.choices[0].message.content) #Response from the LLM model
+#2nd call to llm happens in the next iteration
