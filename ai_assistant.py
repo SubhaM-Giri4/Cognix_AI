@@ -2,7 +2,8 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-from tools import TOOLS, function_name_mpp
+from tools import TOOLS, run_tool
+from Utilities.utilities import log
 import json
 
 load_dotenv()  #by default looks for .env file
@@ -54,31 +55,21 @@ while True:
 
         msg = response.choices[0].message
 
+        log(f"Step {step + 1}: model requested {len(msg.tool_calls or [])} tool calls.")#no of tool calls requested by the model in this step
+
         # even try to print the full response and see the whole response kaise tool milta ki konsa tool call karna hai
         if msg.tool_calls:
             messages.append(msg)
 
             for tool_call in msg.tool_calls:
-                function_name = tool_call.function.name
-                func_args = {}
 
-                try:
-                    func_args = json.loads(tool_call.function.arguments or "{}")
-                    fn = function_name_mpp.get(function_name)
+               result = run_tool(tool_call)#call function
 
-                    if fn is None:
-                        raise ValueError("Unknown function: " + function_name)
-
-                    tool_response = fn(**func_args)
-
-                except Exception as e:
-                    tool_response = f"Error calling function {function_name}: {str(e)}"
-
-                messages.append(
+               messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": str(tool_response)
+                        "content": str(result)
                     }
                 )
 
